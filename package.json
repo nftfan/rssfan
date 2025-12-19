@@ -1,0 +1,14 @@
+{
+  "name": "tg-news-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-fetch": "^3.4.0",
+    "rss-parser": "^3.13.0",
+    "dotenv": "^16.4.5"
+  }
+}
