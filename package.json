@@ -2,12 +2,15 @@
   "name": "tg-news-keyword-bot",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.js",
+  "main": "bot.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node bot.js"
   },
   "dependencies": {
     "rss-parser": "^3.13.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "axios": "^1.6.0",
+    "node-fetch": "^3.3.2",
+    "form-data": "^4.0.0"
   }
 }
