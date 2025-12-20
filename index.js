@@ -2,19 +2,16 @@ import 'dotenv/config';
 import Parser from "rss-parser";
 import fetch from "node-fetch";
 import axios from "axios";
-import fs from "fs";
-import path from "path";
+import FormData from "form-data";
 
 const parser = new Parser();
 
 // --- Telegram Bot Info ---
 const BOT_TOKEN = process.env.BOT_TOKEN || "8563264926:AAFtaLS_XqfRPRksF5L_5YxtA12zT6Mv6-A";
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
-
-// --- Poll Telegram updates ---
 let offset = 0;
 
-// --- Functions ---
+// --- Helper Functions ---
 async function getUpdates() {
     const res = await fetch(`${TELEGRAM_API}/getUpdates?timeout=30&offset=${offset}`);
     const data = await res.json();
@@ -29,15 +26,17 @@ async function sendMessage(chat_id, text) {
     });
 }
 
-// Sends MP3 audio file
 async function sendAudio(chat_id, audioBuffer, title='audio.mp3') {
-    const formData = new FormData();
-    formData.append('chat_id', chat_id);
-    formData.append('audio', audioBuffer, title);
+    const form = new FormData();
+    form.append('chat_id', chat_id);
+    form.append('audio', audioBuffer, {
+        filename: title,
+        contentType: 'audio/mpeg'
+    });
 
     await fetch(`${TELEGRAM_API}/sendAudio`, {
         method: "POST",
-        body: formData
+        body: form
     });
 }
 
@@ -61,7 +60,6 @@ async function handleUpdate(update) {
 
     try {
         if (isYoutubeUrl(text)) {
-            // --- YouTube to MP3 feature ---
             await sendMessage(chat_id, "Converting YouTube to MP3...");
 
             // Step 1: Get MP3 link from ytmp3.ai
@@ -72,33 +70,21 @@ async function handleUpdate(update) {
             );
 
             const mp3Link = ytmp3Response.data?.links?.mp3;
+            const title = (ytmp3Response.data?.title || 'audio') + '.mp3';
+
             if (!mp3Link) {
                 await sendMessage(chat_id, 'Sorry, conversion failed. Try another YouTube link.');
                 return;
             }
-            // Step 2: Download the MP3 file as buffer
+
+            // Step 2: Download MP3 as buffer
             const audioResp = await axios.get(mp3Link, { responseType: 'arraybuffer' });
             const audioBuffer = Buffer.from(audioResp.data);
 
-            // Step 3: Send MP3 buffer to Telegram as audio
-            // Use sendAudio with multipart/form-data!
-            // node-fetch doesn't support FormData natively in v3, use form-data or undici
-            // We'll use form-data here:
-            import FormData from 'form-data';
-            const form = new FormData();
-            form.append('chat_id', chat_id);
-            form.append('audio', audioBuffer, {
-                filename: (ytmp3Response.data.title || 'audio') + '.mp3',
-                contentType: 'audio/mpeg'
-            });
-
-            await fetch(`${TELEGRAM_API}/sendAudio`, {
-                method: "POST",
-                body: form
-            });
+            // Step 3: Send MP3 file
+            await sendAudio(chat_id, audioBuffer, title);
 
         } else {
-            // --- Keyword News Search Feature ---
             const headlines = await getTopHeadlines(text, 5);
             if (headlines.length === 0) {
                 await sendMessage(chat_id, `No recent headlines found for "<b>${text}</b>".`);
@@ -115,7 +101,7 @@ async function handleUpdate(update) {
 
 // --- Main loop ---
 async function main() {
-    console.log("Telegram keyword+YouTube-MP3 bot running...");
+    console.log("Telegram news+YouTube MP3 bot running...");
 
     setInterval(async () => {
         try {
