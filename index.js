@@ -7,9 +7,6 @@ const parser = new Parser();
 const BOT_TOKEN = process.env.BOT_TOKEN || "8563264926:AAFtaLS_XqfRPRksF5L_5YxtA12zT6Mv6-A";
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-// --- Poll Telegram updates ---
-let offset = 0;
-
 // --- Helpers for HTML escaping ---
 function escapeHTML(str = "") {
   return String(str)
@@ -17,7 +14,6 @@ function escapeHTML(str = "") {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
-
 function escapeAttr(str = "") {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -26,13 +22,7 @@ function escapeAttr(str = "") {
     .replace(/>/g, "&gt;");
 }
 
-// --- Functions ---
-async function getUpdates() {
-  const res = await fetch(`${TELEGRAM_API}/getUpdates?timeout=30&offset=${offset}`);
-  const data = await res.json();
-  return data.ok ? data.result : [];
-}
-
+// --- Core Functions ---
 async function sendMessage(chat_id, text) {
   await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
@@ -41,66 +31,72 @@ async function sendMessage(chat_id, text) {
   });
 }
 
-async function getTopHeadlines(keyword, limit = 10) {
-  const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(keyword)}&hl=en-US&gl=US&ceid=US:en`;
+async function getLatestHeadline() {
+  const rssUrl = 'https://news.google.com/rss/search?q=%22Pakistan%22%20when%3A1h&hl=en-US&gl=US&ceid=US%3Aen';
   const feed = await parser.parseURL(rssUrl);
-  // Return title + link for each item
-  return feed.items.slice(0, limit).map(item => ({
-    title: item.title || "",
-    link: item.link || ""
-  }));
+  const item = feed.items[0];
+  return item
+    ? {
+        title: item.title || "",
+        link: item.link || ""
+      }
+    : null;
 }
 
-async function handleUpdate(update) {
-  const message = update.message;
-  if (!message || !message.text) return;
+// --- Auto-send new headline every 5 minutes ---
+let lastChatId = null;
 
-  const chat_id = message.chat.id;
-  const keyword = message.text.trim();
-  if (!keyword) return;
-
-  const limit = 10;
-
-  try {
-    const headlines = await getTopHeadlines(keyword, limit);
-    if (headlines.length === 0) {
-      await sendMessage(chat_id, `No recent headlines found for "<b>${escapeHTML(keyword)}</b>".`);
-    } else {
-      const msg = headlines
-        .map((h, i) => {
-          const title = escapeHTML(h.title);
-          const url = escapeAttr(h.link);
-          // Make title clickable with HTML parse_mode
-          return `📰 ${i + 1}. <a href="${url}">${title}</a>`;
-        })
-        .join("\n\n");
-
-      await sendMessage(
-        chat_id,
-        `Top ${headlines.length} headlines for "<b>${escapeHTML(keyword)}</b>":\n\n${msg}`
-      );
+// Listen for at least one update to get a chat_id
+async function getInitialChatId() {
+  // Get the latest message sent to the bot (required for chat_id to send news)
+  const res = await fetch(`${TELEGRAM_API}/getUpdates?timeout=30`);
+  const data = await res.json();
+  if (data.ok && data.result.length > 0) {
+    // Get the chat_id from the most recent message
+    for (let i = data.result.length - 1; i >= 0; --i) {
+      if (data.result[i].message && data.result[i].message.chat) {
+        return data.result[i].message.chat.id;
+      }
     }
-  } catch (err) {
-    console.error("Error fetching headlines:", err);
-    await sendMessage(chat_id, `Failed to fetch headlines for "<b>${escapeHTML(keyword)}</b>".`);
   }
+  return null;
 }
 
-// --- Main loop ---
 async function main() {
-  console.log("Telegram keyword bot running...");
+  console.log("Telegram latest Pakistan news bot running...");
+
+  lastChatId = await getInitialChatId();
+
+  if (!lastChatId) {
+    console.error("No chat_id found. Send a message to your bot first on Telegram.");
+    return;
+  }
+
+  let lastSentHeadline = "";
 
   setInterval(async () => {
     try {
-      const updates = await getUpdates();
-      for (const update of updates) {
-        offset = update.update_id + 1;
-        await handleUpdate(update);
+      const headline = await getLatestHeadline();
+      if (!headline) {
+        console.log("No headline found.");
+        return;
+      }
+
+      // Avoid sending the same headline repeatedly
+      if (headline.title !== lastSentHeadline) {
+        const title = escapeHTML(headline.title);
+        const url = escapeAttr(headline.link);
+        const msg = `📰 <a href="${url}">${title}</a>`;
+        await sendMessage(lastChatId, msg);
+        lastSentHeadline = headline.title;
+        console.log("Sent headline:", headline.title);
+      } else {
+        console.log("No new headline to send.");
       }
     } catch (err) {
-      console.error("Error handling updates:", err);
+      console.error("Error fetching/sending headline:", err);
     }
-  }, 2000); // poll every 2 seconds
+  }, 5 * 60 * 1000); // Every 5 minutes
 }
 
 main();
