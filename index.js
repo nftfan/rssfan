@@ -32,7 +32,7 @@ async function sendMessage(chat_id, text) {
 }
 
 async function getLatestHeadline() {
-  const rssUrl = 'https://news.google.com/rss/search?q=%22Pakistan%22%20when%3A1h&hl=en-US&gl=US&ceid=US%3Aen';
+  const rssUrl = 'https://news.google.com/rss/search?q=%22a%22%20when%3A1h&hl=en-US&gl=US&ceid=US%3Aen';
   const feed = await parser.parseURL(rssUrl);
   const item = feed.items[0];
   return item
