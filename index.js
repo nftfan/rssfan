@@ -96,7 +96,7 @@ async function main() {
     } catch (err) {
       console.error("Error fetching/sending headline:", err);
     }
-  }, 5 * 60 * 1000); // Every 5 minutes
+  }, 1 * 60 * 1000); // Every 5 minutes
 }
 
 main();
